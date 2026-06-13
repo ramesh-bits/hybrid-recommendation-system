@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+
+  # ── 1. Model Server ────────────────────────────────────────────────────────
+  model-server:
+    build:
+      context: ./model-server
+      dockerfile: Dockerfile
+    container_name: recommender-model-server
+    ports:
+      - "8001:8001"
+    volumes:
+      # Shared data volume: preprocessed data + saved models
+      - ./data:/data
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── 2. API Gateway ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: recommender-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_SERVER_URL=http://model-server:8001
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      model-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # ── 3. Streamlit UI ──────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: recommender-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  default:
+    name: recommender-net
