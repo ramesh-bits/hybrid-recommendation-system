@@ -20,9 +20,11 @@ env/
 .env
 
 # ── Data – downloaded & generated, not source-controlled ────────────────────
-data/raw/           # MovieLens zip + extracted files (~30 MB) — run `make data`
-data/processed/     # Pickle files (numpy-version-sensitive) — run `make data`
-data/models/        # Trained model artefacts — run POST /train
+# Downloaded dataset, preprocessed pickles, trained model artefacts
+# Regenerate with: make data  →  POST /train
+data/raw/
+data/processed/
+data/models/
 
 # ── macOS ────────────────────────────────────────────────────────────────────
 .DS_Store
