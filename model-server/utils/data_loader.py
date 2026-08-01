@@ -1,4 +1,4 @@
-"""Loads preprocessed MovieLens data from disk. Shared by training and inference."""
+"""Loads preprocessed data from disk. Shared by training and inference."""
 import os
 import pickle
 import pandas as pd
@@ -23,7 +23,11 @@ def load_ratings() -> pd.DataFrame:
 
 
 def load_items() -> pd.DataFrame:
-    return pd.read_pickle(_path("items.pkl"))
+    df = pd.read_pickle(_path("items.pkl"))
+    # backwards-compat: old pickles used "title" before dataset-agnostic rename
+    if "title" in df.columns and "name" not in df.columns:
+        df = df.rename(columns={"title": "name"})
+    return df
 
 
 def load_users() -> pd.DataFrame:

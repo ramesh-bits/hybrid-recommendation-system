@@ -30,8 +30,10 @@ def ndcg_at_k(recommended: List, relevant: set, k: int) -> float:
     return dcg / idcg if idcg > 0 else 0.0
 
 
-def mrr(recommended: List, relevant: set) -> float:
-    for rank, item in enumerate(recommended):
+def mrr(recommended: List, relevant: set, k: int = None) -> float:
+    """Reciprocal rank of the first relevant item, truncated at k if given."""
+    top = recommended[:k] if k else recommended
+    for rank, item in enumerate(top):
         if item in relevant:
             return 1.0 / (rank + 1)
     return 0.0
@@ -74,7 +76,7 @@ def evaluate_model(
             results[k]["precision"].append(precision_at_k(recommended, relevant, k))
             results[k]["recall"].append(recall_at_k(recommended, relevant, k))
             results[k]["ndcg"].append(ndcg_at_k(recommended, relevant, k))
-            results[k]["mrr"].append(mrr(recommended, relevant))
+            results[k]["mrr"].append(mrr(recommended, relevant, k))
 
     summary = {}
     for k in k_values:

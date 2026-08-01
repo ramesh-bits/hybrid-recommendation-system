@@ -1,4 +1,4 @@
-.PHONY: setup data train up down logs clean
+.PHONY: setup data train ingest up down logs clean
 
 ## 1. Install local Python deps (for development outside Docker)
 setup:
@@ -10,7 +10,15 @@ setup:
 data:
 	python data/download.py
 
-## 3. Train all models (requires preprocessed data)
+## 3. Ingest a custom dataset via the running model-server API
+##    Usage: make ingest RATINGS=path/to/ratings.csv ITEMS=path/to/items.csv CONFIG=path/to/config.json
+ingest:
+	curl -X POST http://localhost:8001/upload \
+	  -F "ratings_file=@$(RATINGS)" \
+	  -F "items_file=@$(ITEMS)" \
+	  -F "config_json=$$(cat $(CONFIG))"
+
+## 4. Train all models (requires preprocessed data)
 train:
 	cd model-server && python train.py
 

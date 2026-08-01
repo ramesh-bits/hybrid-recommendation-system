@@ -108,11 +108,19 @@ class NeuralCollaborativeFilter:
             for it in neg_items:
                 neg_rows.append(
                     dict(user_idx=user_idx, item_idx=it, label=0.0,
-                         hour=med_hour, day_of_week=med_dow, month=med_mon)
+                         hour=med_hour, day_of_week=med_dow, month=med_mon,
+                         sample_weight=1.0)
                 )
 
         neg_df = pd.DataFrame(neg_rows)
-        pos_df = ratings[["user_idx", "item_idx", "label", "hour", "day_of_week", "month"]].copy()
+        pos_cols = ["user_idx", "item_idx", "label", "hour", "day_of_week", "month"]
+        pos_df = ratings[pos_cols].copy()
+        # Behavioural confidence: positives with strong engagement signals
+        # (orders, cart adds, long view times) count more in the loss.
+        if "interaction_weight" in ratings.columns:
+            pos_df["sample_weight"] = ratings["interaction_weight"].fillna(1.0).values
+        else:
+            pos_df["sample_weight"] = 1.0
         combined = pd.concat([pos_df, neg_df], ignore_index=True).sample(frac=1).reset_index(drop=True)
         return combined
 
@@ -135,12 +143,14 @@ class NeuralCollaborativeFilter:
             "mon_in":  df["month"].values,
         }
         labels = df["label"].values.astype(np.float32)
+        sample_weight = df["sample_weight"].values.astype(np.float32)
 
         callbacks = [
             keras.callbacks.EarlyStopping(patience=3, restore_best_weights=True),
         ]
         return self.model.fit(
             inputs, labels,
+            sample_weight=sample_weight,
             epochs=epochs,
             batch_size=batch_size,
             validation_split=validation_split,

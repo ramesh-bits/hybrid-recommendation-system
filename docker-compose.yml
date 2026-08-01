@@ -54,6 +54,9 @@ services:
       - "8501:8501"
     environment:
       - API_URL=http://api:8000
+      # Dump a Python traceback even on native crashes (SIGSEGV etc.)
+      - PYTHONFAULTHANDLER=1
+    restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy

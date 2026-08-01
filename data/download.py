@@ -1,18 +1,24 @@
 """
-Downloads MovieLens 100K and preprocesses it into pickle files consumed by the model server.
-Run this once before training: python data/download.py
+Downloads MovieLens 100K and preprocesses it via the generic ingest pipeline.
+Run once before training: python data/download.py
 """
 import os
+import sys
 import urllib.request
 import zipfile
-import pickle
-import numpy as np
+
+# Allow importing ingest.py from model-server/utils/ and DatasetConfig from data/
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_ROOT, "model-server"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+from dataset_config import DatasetConfig
+from utils.ingest import process
 
 MOVIELENS_URL = "https://files.grouplens.org/datasets/movielens/ml-100k.zip"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RAW_DIR = os.path.join(BASE_DIR, "raw")
+BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
+RAW_DIR       = os.path.join(BASE_DIR, "raw")
 PROCESSED_DIR = os.path.join(BASE_DIR, "processed")
 
 GENRE_COLS = [
@@ -20,6 +26,15 @@ GENRE_COLS = [
     "Crime", "Documentary", "Drama", "Fantasy", "Film-Noir", "Horror",
     "Musical", "Mystery", "Romance", "Sci-Fi", "Thriller", "War", "Western",
 ]
+
+MOVIELENS_CONFIG = DatasetConfig(
+    dataset_name    = "movielens-100k",
+    item_label      = "movie",
+    feature_cols    = GENRE_COLS,
+    feature_label   = "Genre",
+    rating_threshold= 3.5,
+    item_name_col   = "title",   # raw ML-100K column — ingest renames to "name"
+)
 
 
 def download():
@@ -63,53 +78,14 @@ def load_raw():
 
 def preprocess():
     download()
-    os.makedirs(PROCESSED_DIR, exist_ok=True)
-
     ratings, items, users = load_raw()
-
-    # Consecutive 0-based indices for model embeddings
-    user_enc = LabelEncoder().fit(ratings["user_id"])
-    item_enc = LabelEncoder().fit(ratings["item_id"])
-    ratings["user_idx"] = user_enc.transform(ratings["user_id"])
-    ratings["item_idx"] = item_enc.transform(ratings["item_id"])
-
-    # Temporal context features
-    ratings["datetime"] = pd.to_datetime(ratings["timestamp"], unit="s")
-    ratings["hour"] = ratings["datetime"].dt.hour
-    ratings["day_of_week"] = ratings["datetime"].dt.dayofweek
-    ratings["month"] = ratings["datetime"].dt.month - 1  # 0-based
-
-    # Item features aligned to item_idx order
-    items["item_idx"] = item_enc.transform(items["item_id"].values)
-    items = items.sort_values("item_idx").reset_index(drop=True)
-
-    # Implicit feedback label (threshold 3.5)
-    ratings["label"] = (ratings["rating"] >= 3.5).astype(np.float32)
-
-    n_users = len(user_enc.classes_)
-    n_items = len(item_enc.classes_)
-
-    meta = {
-        "n_users": n_users,
-        "n_items": n_items,
-        "genre_cols": GENRE_COLS,
-        "user_enc_classes": user_enc.classes_.tolist(),
-        "item_enc_classes": item_enc.classes_.tolist(),
-    }
-
-    # Persist
-    ratings.to_pickle(os.path.join(PROCESSED_DIR, "ratings.pkl"))
-    items.to_pickle(os.path.join(PROCESSED_DIR, "items.pkl"))
-    users.to_pickle(os.path.join(PROCESSED_DIR, "users.pkl"))
-    with open(os.path.join(PROCESSED_DIR, "meta.pkl"), "wb") as f:
-        pickle.dump(meta, f)
-    with open(os.path.join(PROCESSED_DIR, "user_encoder.pkl"), "wb") as f:
-        pickle.dump(user_enc, f)
-    with open(os.path.join(PROCESSED_DIR, "item_encoder.pkl"), "wb") as f:
-        pickle.dump(item_enc, f)
-
-    print(f"Done: {n_users} users, {n_items} items, {len(ratings)} ratings → {PROCESSED_DIR}")
-    return ratings, items, users, meta
+    process(
+        ratings=ratings,
+        items=items,
+        config=MOVIELENS_CONFIG,
+        output_dir=PROCESSED_DIR,
+        users=users,
+    )
 
 
 if __name__ == "__main__":
